@@ -26,15 +26,14 @@
 # set(MODULE_QRC somename.qrc)  - set resource (qrc) file
 # set(MODULE_UI ...)            - set ui headers
 # set(MODULE_QML_IMPORT ...)    - set Qml import for QtCreator (so that there is code highlighting, jump, etc.)
-# set(MODULE_HAS_C_CODE, 1)     - set if source contains C code
+# set(MODULE_USE_PCH_NONE ON)   - set for disable PCH for module
+# set(MODULE_USE_UNITY_NONE ON) - set for disable UNITY BUILD for module
+
 
 # After all the settings you need to do:
 # include(${PROJECT_SOURCE_DIR}/build/module.cmake)
 
 message(STATUS "Configuring " ${MODULE})
-
-set(LIBRARY_TYPE STATIC)
-set(_all_h_file "${PROJECT_SOURCE_DIR}/all.h")
 
 if (MODULE_QRC)
     qt5_add_resources(RCC_SOURCES ${MODULE_QRC})
@@ -49,29 +48,57 @@ if (NOT ${MODULE_QML_IMPORT} STREQUAL "")
     set(QML_IMPORT_PATH "${QML_IMPORT_PATH};${MODULE_QML_IMPORT}" CACHE STRING "QtCreator extra import paths for QML modules" FORCE)
 endif()
 
-add_library(${MODULE} ${LIBRARY_TYPE}
-    ${_all_h_file}
+if (CC_IS_EMSCRIPTEN)
+    add_library(${MODULE} OBJECT)
+else()
+    add_library(${MODULE}) # STATIC/SHARED set global in the SetupBuildEnvironment.cmake
+endif()
+
+if (BUILD_SHARED_LIBS)
+    install(TARGETS ${MODULE} DESTINATION ${SHARED_LIBS_INSTALL_DESTINATION})
+
+    if (NOT MSVC)
+        set_target_properties(${MODULE} PROPERTIES COMPILE_FLAGS "-fPIC")
+    endif (NOT MSVC)
+endif()
+
+if (BUILD_PCH)
+    if (MODULE_USE_PCH_NONE)
+        # disabled pch for current module
+    else()
+        if(NOT ${MODULE} MATCHES global)
+            target_precompile_headers(${MODULE} REUSE_FROM global)
+            target_compile_definitions(${MODULE} PRIVATE global_EXPORTS=1)
+        else()
+            target_precompile_headers(${MODULE} PRIVATE ${PROJECT_SOURCE_DIR}/build/pch/pch.h)
+        endif()
+    endif()
+endif(BUILD_PCH)
+
+if (BUILD_UNITY)
+    if (MODULE_USE_UNITY_NONE)
+        # disabled unity build for current module
+        set_target_properties(${MODULE} PROPERTIES UNITY_BUILD OFF)
+    else()
+        set_target_properties(${MODULE} PROPERTIES UNITY_BUILD ON)
+    endif()
+endif(BUILD_UNITY)
+
+target_sources(${MODULE} PRIVATE
     ${ui_headers}
     ${RCC_SOURCES}
     ${MODULE_SRC}
-)
+    )
 
 target_include_directories(${MODULE} PUBLIC
     ${PROJECT_BINARY_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${PROJECT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/framework
-    ${PROJECT_SOURCE_DIR}/framework/global
-    ${PROJECT_SOURCE_DIR}/mu4
+    ${PROJECT_SOURCE_DIR}/src/framework
+    ${PROJECT_SOURCE_DIR}/src/framework/global
+    ${PROJECT_SOURCE_DIR}/src
     ${MODULE_INCLUDE}
 )
-
-string(TOLOWER ${CMAKE_BUILD_TYPE} build_mode )
-if (build_mode STREQUAL "debug")
-    set(MODULE_DEF ${MODULE_DEF} -D_DEBUG)
-else()
-    set(MODULE_DEF ${MODULE_DEF} -DNDEBUG)
-endif()
 
 target_compile_definitions(${MODULE} PUBLIC
     ${MODULE_DEF}
@@ -84,33 +111,4 @@ endif()
 
 set(MODULE_LINK ${QT_LIBRARIES} ${MODULE_LINK})
 
-target_link_libraries(${MODULE}
-    ${MODULE_LINK}
-    )
-
-if (MODULE_HAS_C_CODE)
-
-    set_target_properties( ${MODULE} PROPERTIES COMPILE_FLAGS "-fPIC")
-
-else(MODULE_HAS_C_CODE)
-
-    if (NOT MSVC)
-        set_target_properties (${MODULE} PROPERTIES COMPILE_FLAGS "${PCH_INCLUDE} -g -Wall -Wextra -Winvalid-pch")
-    else (NOT MSVC)
-        set_target_properties (${MODULE} PROPERTIES COMPILE_FLAGS "${PCH_INCLUDE}" )
-    endif (NOT MSVC)
-
-    xcode_pch(${MODULE} all)
-
-    # Use MSVC pre-compiled headers
-    vstudio_pch( ${MODULE} )
-
-    # MSVC does not depend on mops1 & mops2 for PCH
-    if (NOT MSVC)
-        ADD_DEPENDENCIES(${MODULE} mops1)
-        ADD_DEPENDENCIES(${MODULE} mops2)
-    endif (NOT MSVC)
-
-endif()
-
-
+target_link_libraries(${MODULE} PRIVATE ${MODULE_LINK} )

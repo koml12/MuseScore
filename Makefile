@@ -21,20 +21,18 @@ CPUS      := $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || getconf NPROCESSOR
 
 PREFIX    = "/usr/local"
 VERSION   := $(shell cmake -P config.cmake | sed -n -e "s/^.*VERSION  *//p")
-BUILD_NUMBER=""
 
+MUSESCORE_BUILD_CONFIG="dev"
+MUSESCORE_REVISION=""
+BUILD_NUMBER=""
 TELEMETRY_TRACK_ID=""
+CRASH_REPORT_URL=""
 
 # Override SUFFIX and LABEL when multiple versions are installed to avoid conflicts.
 SUFFIX=""# E.g.: SUFFIX="dev" --> "mscore" becomes "mscoredev"
 LABEL=""# E.g.: LABEL="Development Build" --> "MuseScore 2" becomes "MuseScore 2 Development Build"
 
-BUILD_LAME="ON" # Non-free, required for MP3 support. Override with "OFF" to disable.
-BUILD_PULSEAUDIO="ON" # Override with "OFF" to disable.
-BUILD_JACK="ON"       # Override with "OFF" to disable.
-BUILD_ALSA="ON"       # Override with "OFF" to disable.
-BUILD_PORTAUDIO="ON"  # Override with "OFF" to disable.
-BUILD_PORTMIDI="ON"   # Override with "OFF" to disable.
+BUILD_JACK="OFF"      # Override with "ON" to enable.
 BUILD_WEBENGINE="ON"  # Override with "OFF" to disable.
 USE_SYSTEM_FREETYPE="OFF" # Override with "ON" to enable. Requires freetype >= 2.5.2.
 COVERAGE="OFF"        # Override with "ON" to enable.
@@ -43,7 +41,9 @@ DOWNLOAD_SOUNDFONT="ON"   # Override with "OFF" to disable latest soundfont down
 UPDATE_CACHE="TRUE"# Override if building a DEB or RPM, or when installing to a non-standard location.
 NO_RPATH="FALSE"# Package maintainers may want to override this (e.g. Debian)
 
-BUILD_UI_MU4="OFF"
+BUILD_UNIT_TESTS="OFF"
+BUILD_VST="OFF"
+VST3_SDK_PATH=""
 
 #
 # change path to include your Qt5 installation
@@ -59,18 +59,18 @@ release:
   	  -DCMAKE_INSTALL_PREFIX="${PREFIX}"       \
   	  -DMSCORE_INSTALL_SUFFIX="${SUFFIX}"      \
   	  -DMUSESCORE_LABEL="${LABEL}"             \
+	  -DMUSESCORE_BUILD_CONFIG="${MUSESCORE_BUILD_CONFIG}" \
+	  -DMUSESCORE_REVISION="${MUSESCORE_REVISION}" \
   	  -DCMAKE_BUILD_NUMBER="${BUILD_NUMBER}"   \
   	  -DTELEMETRY_TRACK_ID="${TELEMETRY_TRACK_ID}" \
-  	  -DBUILD_LAME="${BUILD_LAME}"             \
-  	  -DBUILD_PULSEAUDIO="${BUILD_PULSEAUDIO}" \
-  	  -DBUILD_PORTMIDI="${BUILD_PORTMIDI}"  \
-  	  -DBUILD_JACK="${BUILD_JACK}"             \
-  	  -DBUILD_ALSA="${BUILD_ALSA}"              \
-   	  -DBUILD_PORTAUDIO="${BUILD_PORTAUDIO}"   \
+  	  -DCRASH_REPORT_URL="${CRASH_REPORT_URL}" \
+	  -DBUILD_JACK="${BUILD_JACK}"             \
    	  -DBUILD_WEBENGINE="${BUILD_WEBENGINE}"   \
    	  -DUSE_SYSTEM_FREETYPE="${USE_SYSTEM_FREETYPE}" \
    	  -DDOWNLOAD_SOUNDFONT="${DOWNLOAD_SOUNDFONT}"   \
-	  -DBUILD_UI_MU4="${BUILD_UI_MU4}"         \
+	  -DBUILD_VST="${BUILD_VST}"         		\
+	  -DVST3_SDK_PATH="${VST3_SDK_PATH}"         \
+	  -DBUILD_UNIT_TESTS="${BUILD_UNIT_TESTS}" \
   	  -DCMAKE_SKIP_RPATH="${NO_RPATH}"     ..; \
       make lrelease;                             \
       make -j ${CPUS};                           \
@@ -92,18 +92,31 @@ debug:
   	  -DMSCORE_INSTALL_SUFFIX="${SUFFIX}"                 \
   	  -DMUSESCORE_LABEL="${LABEL}"                        \
   	  -DCMAKE_BUILD_NUMBER="${BUILD_NUMBER}"              \
-  	  -DBUILD_LAME="${BUILD_LAME}"                        \
-  	  -DBUILD_PULSEAUDIO="${BUILD_PULSEAUDIO}"            \
-  	  -DBUILD_PORTMIDI="${BUILD_PORTMIDI}"             \
-  	  -DBUILD_JACK="${BUILD_JACK}"                        \
-  	  -DBUILD_ALSA="${BUILD_ALSA}"                         \
-   	  -DBUILD_PORTAUDIO="${BUILD_PORTAUDIO}"              \
+	  -DBUILD_JACK="${BUILD_JACK}"             	      \
    	  -DBUILD_WEBENGINE="${BUILD_WEBENGINE}"              \
    	  -DUSE_SYSTEM_FREETYPE="${USE_SYSTEM_FREETYPE}"      \
-      -DCOVERAGE="${COVERAGE}"                 \
-   	  -DDOWNLOAD_SOUNDFONT="${DOWNLOAD_SOUNDFONT}"        \
+   	  -DCOVERAGE="${COVERAGE}"                          \
+   	  -DDOWNLOAD_SOUNDFONT="${DOWNLOAD_SOUNDFONT}"      \
   	  -DCMAKE_SKIP_RPATH="${NO_RPATH}"     ..;            \
       make lrelease;                                        \
+      make -j ${CPUS};                                      \
+
+
+utests:
+	if test ! -d build.debug; then mkdir build.debug; fi; \
+      cd build.debug;                                       \
+      export PATH=${BINPATH};                               \
+      cmake -DCMAKE_BUILD_TYPE=DEBUG	                    \
+  	  -DCMAKE_INSTALL_PREFIX="${PREFIX}"                  \
+  	  -DMSCORE_INSTALL_SUFFIX="${SUFFIX}"                 \
+  	  -DMUSESCORE_LABEL="${LABEL}"                        \
+  	  -DCMAKE_BUILD_NUMBER="${BUILD_NUMBER}"              \
+	  -DBUILD_JACK="${BUILD_JACK}"             	      \
+   	  -DBUILD_WEBENGINE="${BUILD_WEBENGINE}"              \
+   	  -DUSE_SYSTEM_FREETYPE="${USE_SYSTEM_FREETYPE}"      \
+   	  -DBUILD_UNIT_TESTS="${BUILD_UNIT_TESTS}" \
+   	  -DDOWNLOAD_SOUNDFONT=OFF \
+	  ..; \
       make -j ${CPUS};                                      \
 
 #
@@ -139,7 +152,7 @@ clean:
 	-rm -rf win32build win32install
 
 revision:
-	@git rev-parse --short=7 HEAD > mscore/revision.h
+	@git rev-parse --short=7 HEAD | tr -d '\n' > local_build_revision.env
 
 version:
 	@echo ${VERSION}
@@ -178,11 +191,7 @@ portable: install
 
 installdebug: debug
 	cd build.debug \
-	&& make install \
-	&& if [ ${UPDATE_CACHE} = "TRUE" ]; then \
-	     update-mime-database "${PREFIX}/share/mime"; \
-	     gtk-update-icon-cache -f -t "${PREFIX}/share/icons/hicolor"; \
-	fi
+	&& make install 
 
 uninstall:
 	cd build.release \

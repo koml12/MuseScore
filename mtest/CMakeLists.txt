@@ -34,10 +34,6 @@ else (USE_SYSTEM_FREETYPE)
       include_directories(${PROJECT_SOURCE_DIR}/thirdparty/freetype/include)
 endif (USE_SYSTEM_FREETYPE)
 
-if (OMR)
-      set(OMR_SRC ${PROJECT_SOURCE_DIR}/omr/importpdf.cpp)
-endif (OMR)
-
 if (MSVC)
       set(_all_h_file "${PROJECT_SOURCE_DIR}/all.h")
 endif (MSVC)
@@ -53,6 +49,7 @@ QT5_ADD_RESOURCES(qrc_files ${PROJECT_SOURCE_DIR}/mtest/mtest.qrc
       ${PROJECT_SOURCE_DIR}/framework/fonts/fonts_MuseJazz.qrc
       ${PROJECT_SOURCE_DIR}/framework/fonts/fonts_Smufl.qrc
       ${PROJECT_SOURCE_DIR}/framework/fonts/fonts_Tabulature.qrc
+      ${PROJECT_SOURCE_DIR}/framework/fonts/fonts_Petaluma.qrc
 )
 
 add_library (testResources STATIC
@@ -66,6 +63,7 @@ include(${IMPORTEXPORT_DIR}/musicxml/musicxml.cmake)
 include(${IMPORTEXPORT_DIR}/guitarpro/guitarpro.cmake)
 include(${IMPORTEXPORT_DIR}/ove/ove.cmake)
 include(${IMPORTEXPORT_DIR}/midiimport/midiimport.cmake)
+include(${IMPORTEXPORT_DIR}/braille/braille.cmake)
 
 set (SOURCE_LIB
       testutils.cpp
@@ -74,7 +72,7 @@ set (SOURCE_LIB
       ${BB_SRC}
       ${CAPELLA_SRC}
       ${MUSICXML_SRC}
-      ${MUSICXML_SRC}
+      ${BRAILLE_SRC}
       ${GUITARPRO_SRC}
       ${OVE_SRC}
       ${MIDIIMPORT_SRC}
@@ -93,7 +91,6 @@ set (SOURCE_LIB
       ${PROJECT_SOURCE_DIR}/thirdparty/beatroot/BeatTracker.cpp     # Required by importmidi.cpp
       ${PROJECT_SOURCE_DIR}/thirdparty/beatroot/Induction.cpp       # Required by importmidi.cpp
       ${PROJECT_SOURCE_DIR}/mscore/extension.cpp # required by zerberus tests
-      ${OMR_SRC}
       omr
       )
 
@@ -219,12 +216,13 @@ subdirs (
         libmscore/tuplet
 #        libmscore/text        work in progress...
         libmscore/utils
-        mscore/workspaces
-        mscore/palette
+#        mscore/workspaces    Not worked on CI, because "Could not initialize GLX"
+#        mscore/palette       Not worked on CI, because "Could not initialize GLX"
         importmidi
         capella
         biab
         musicxml
+        braille
         guitarpro
         scripting
         stringutils
@@ -254,6 +252,3 @@ install(FILES
       )
 endif (NOT MSVC)
 
-if (OMR)
-      subdirs(omr)
-endif (OMR)

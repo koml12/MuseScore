@@ -2,6 +2,9 @@
 
 echo "Setup MacOS build environment"
 
+trap 'echo Setup failed; exit 1' ERR
+SKIP_ERR_FLAG=true
+
 export MACOSX_DEPLOYMENT_TARGET=10.10
 
 # install dependencies
@@ -9,19 +12,12 @@ wget -c --no-check-certificate -nv -O bottles.zip https://musescore.org/sites/mu
 unzip bottles.zip
 
 # we don't use freetype
-rm bottles/freetype*
+rm bottles/freetype* | $SKIP_ERR_FLAG
 
-brew update
+brew update >/dev/null | $SKIP_ERR_FLAG
 
 # additional dependencies
-brew install jack lame
-
-# TODO Find out why
-#hack to fix macOS build
-# brew uninstall wget
-# brew install wget
-# brew uninstall --ignore-dependencies python2
-# brew install python2
+#brew install jack
 
 BREW_CELLAR=$(brew --cellar)
 BREW_PREFIX=$(brew --prefix)
@@ -74,19 +70,30 @@ installBottleManually libogg
 installBottleManually libvorbis
 installBottleManually flac
 installBottleManually libsndfile
-installBottleManually portaudio
+
+# fixing install python 3.9 error (it is a dependency for ninja)
+rm '/usr/local/bin/2to3'
+brew install ninja
 
 
-export QT_SHORT_VERSION=5.9
+export QT_SHORT_VERSION=5.15.1
 export QT_PATH=$HOME/Qt
 export QT_MACOS=$QT_PATH/$QT_SHORT_VERSION/clang_64
 export PATH=$PATH:$QT_MACOS/bin
-echo "::set-env name=PATH::${PATH}"
+echo "PATH=$PATH" >> $GITHUB_ENV
 wget -nv -O qt5.zip https://s3.amazonaws.com/utils.musescore.org/Qt5151_mac.zip
 mkdir -p $QT_MACOS
 unzip -qq qt5.zip -d $QT_MACOS
 rm qt5.zip
 
+# Dump syms
+wget -q --show-progress -O dump_syms.7z "https://s3.amazonaws.com/utils.musescore.org/breakpad/macos/x86-64/dump_syms.7z"
+7z x -y dump_syms.7z -o"$HOME/breakpad"
+
+# VST SDK
+wget -q --show-progress -O vst_sdk.7z "https://s3.amazonaws.com/utils.musescore.org/VST3_SDK_37.7z"
+7z x -y vst_sdk.7z -o"$HOME/vst"
+echo "VST3_SDK_PATH=$HOME/vst/VST3_SDK" >> $GITHUB_ENV
 
 #install sparkle
 export SPARKLE_VERSION=1.20.0

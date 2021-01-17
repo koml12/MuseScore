@@ -1,0 +1,11 @@
+module MuseScore.Instruments
+ChooseInstrumentsPage 1.0 ChooseInstrumentsPage.qml
+FamilyView 1.0 FamilyView.qml
+InstrumentsView 1.0 InstrumentsView.qml
+SelectedInstrumentsView 1.0 SelectedInstrumentsView.qml
+SelectInstrumentDialog 1.0 SelectInstrumentDialog.qml
+InstrumentsPanel 1.0 InstrumentsPanel.qml
+InstrumentSettingsPopup 1.0 InstrumentSettingsPopup.qml
+InstrumentsDialog 1.0 InstrumentsDialog.qml
+InstrumentsPanel 1.0 InstrumentsPanel.qml
+StaffSettingsPopup 1.0 StaffSettingsPopup.qml

@@ -3,10 +3,10 @@
 # For maximum AppImage compatibility, build on the oldest Linux distribution
 # that still receives security updates from its manufacturer.
 
-set -e # Exit on errors
-set -x # Be verbose
+echo "Setup Linux build environment"
+trap 'echo Setup failed; exit 1' ERR
 
-echo "Setup Linux docker image for build AppImage"
+df -h .
 
 # Go one-up from MuseScore root dir regardless of where script was run from:
 cd "$(dirname "$(readlink -f "${0}")")/../../../.."
@@ -41,15 +41,14 @@ apt_packages_standard=(
   libasound2-dev 
   libfontconfig1-dev
   libfreetype6-dev
+  libfreetype6
   libgl1-mesa-dev
   libjack-dev
-  libmp3lame-dev
   libnss3-dev
   libportmidi-dev
   libpulse-dev
   libsndfile1-dev
   make
-  portaudio19-dev
   wget
   )
 
@@ -68,6 +67,7 @@ apt_packages_runtime=(
   libxkbcommon-x11-0
   libxrandr2
   libxtst-dev
+  libdrm-dev
   libxcb-icccm4
   libxcb-image0
   libxcb-keysyms1
@@ -93,7 +93,6 @@ if [[ ! -d "${qt_dir}" ]]; then
   qt_url="https://s3.amazonaws.com/utils.musescore.org/Qt${qt_version}_gcc64.7z"
   wget -q --show-progress -O qt5.7z "${qt_url}"
   7z x -y qt5.7z -o"${qt_dir}"
-  rm -f qt5.7z
 fi
 qt_path="${PWD%/}/${qt_dir}"
 
@@ -116,7 +115,6 @@ update-alternatives \
   --install /usr/bin/gcc gcc "/usr/bin/gcc-${gcc_version}" 40 \
   --slave /usr/bin/g++ g++ "/usr/bin/g++-${gcc_version}"
 
-#apt-get install -y --no-install-recommends g++
 echo export CC="/usr/bin/gcc-${gcc_version}" >> ${ENV_FILE}
 echo export CXX="/usr/bin/g++-${gcc_version}" >> ${ENV_FILE}
 
@@ -130,68 +128,32 @@ cmake_dir="cmake/${cmake_version}"
 if [[ ! -d "${cmake_dir}" ]]; then
   mkdir -p "${cmake_dir}"
   cmake_url="https://cmake.org/files/v${cmake_version%.*}/cmake-${cmake_version}-Linux-x86_64.tar.gz"
-  wget -q --show-progress --no-check-certificate -O - "${cmake_url}" \
-    | tar --strip-components=1 -xz -C "${cmake_dir}"
+  wget -q --show-progress --no-check-certificate -O - "${cmake_url}" | tar --strip-components=1 -xz -C "${cmake_dir}"
 fi
 echo export PATH="${PWD%/}/${cmake_dir}/bin:\${PATH}" >> ${ENV_FILE}
 export PATH="${PWD%/}/${cmake_dir}/bin:${PATH}"
 cmake --version
 
-# APPIMAGETOOL AND LINUXDEPLOY
+# Ninja
+echo "Get Ninja"
+mkdir -p $HOME/build_tools/Ninja
+wget -q --show-progress -O $HOME/build_tools/Ninja/ninja "https://s3.amazonaws.com/utils.musescore.org/build_tools/linux/Ninja/ninja"
+chmod +x $HOME/build_tools/Ninja/ninja
+echo export PATH="$HOME/build_tools/Ninja:\${PATH}" >> ${ENV_FILE}
+echo "ninja version"
+$HOME/build_tools/Ninja/ninja --version
 
-function download_github_release()
-{
-  local -r repo_slug="$1" release_tag="$2" file="$3"
-  wget -q --show-progress "https://github.com/${repo_slug}/releases/download/${release_tag}/${file}"
-  chmod +x "${file}"
-}
+# Dump syms
+wget -q --show-progress -O dump_syms.7z "https://s3.amazonaws.com/utils.musescore.org/breakpad/linux/x86-64/dump_syms.7z"
+7z x -y dump_syms.7z -o"$HOME/breakpad"
+echo export DUMPSYMS_BIN="$HOME/breakpad/dump_syms" >> $ENV_FILE
 
-function extract_appimage()
-{
-  # Extract AppImage so we can run it without having to install FUSE
-  local -r appimage="$1" binary_name="$2"
-  local -r appdir="${appimage%.AppImage}.AppDir"
-  "./${appimage}" --appimage-extract >/dev/null # dest folder "squashfs-root"
-  mv squashfs-root "${appdir}" # rename folder to avoid collisions
-  ln -s "${appdir}/AppRun" "${binary_name}" # symlink for convenience
-  rm -f "${appimage}"
-}
-
-function download_appimage_release()
-{
-  local -r github_repo_slug="$1" binary_name="$2" tag="$3"
-  local -r appimage="${binary_name}-x86_64.AppImage"
-  download_github_release "${github_repo_slug}" "${tag}" "${appimage}"
-  extract_appimage "${appimage}" "${binary_name}"
-}
-
-if [[ ! -d "appimagetool" ]]; then
-  mkdir appimagetool
-  cd appimagetool
-  # `12` and not `continuous` because see https://github.com/AppImage/AppImageKit/issues/1060
-  download_appimage_release AppImage/AppImageKit appimagetool 12
-  cd ..
-fi
-echo export PATH="${PWD%/}/appimagetool:\${PATH}" >> ${ENV_FILE}
-export PATH="${PWD%/}/appimagetool:${PATH}"
-appimagetool --version
-
-function download_linuxdeploy_component()
-{
-  download_appimage_release "linuxdeploy/$1" "$1" continuous
-}
-
-if [[ ! -d "linuxdeploy" ]]; then
-  mkdir linuxdeploy
-  cd linuxdeploy
-  download_linuxdeploy_component linuxdeploy
-  download_linuxdeploy_component linuxdeploy-plugin-qt
-  cd ..
-fi
-echo export PATH="${PWD%/}/linuxdeploy:\${PATH}" >> ${ENV_FILE}
-export PATH="${PWD%/}/linuxdeploy:${PATH}"
-linuxdeploy --list-plugins
-
+##########################################################################
+# OTHER
+##########################################################################
+wget -q --show-progress -O vst_sdk.7z "https://s3.amazonaws.com/utils.musescore.org/VST3_SDK_37.7z"
+7z x -y vst_sdk.7z -o"$HOME/vst"
+echo export VST3_SDK_PATH="$HOME/vst/VST3_SDK" >> $ENV_FILE
 
 ##########################################################################
 # POST INSTALL
@@ -199,10 +161,11 @@ linuxdeploy --list-plugins
 
 chmod +x "${ENV_FILE}"
 
-# tidy up (reduce size of Docker image)
-apt-get clean autoclean
-apt-get autoremove --purge -y
-rm -rf /tmp/* /var/{cache,log,backups}/* /var/lib/apt/*
+# # tidy up (reduce size of Docker image)
+# apt-get clean autoclean
+# apt-get autoremove --purge -y
+# rm -rf /tmp/* /var/{cache,log,backups}/* /var/lib/apt/*
 
+df -h .
 echo "Setup script done"
 

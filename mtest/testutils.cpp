@@ -42,6 +42,7 @@ static void initMyResources()
     Q_INIT_RESOURCE(fonts_MuseJazz);
     Q_INIT_RESOURCE(fonts_Smufl);
     Q_INIT_RESOURCE(fonts_Tabulature);
+    Q_INIT_RESOURCE(fonts_Petaluma);
 }
 
 namespace Ms {
@@ -121,13 +122,7 @@ MasterScore* MTest::readCreatedScore(const QString& name)
         rv = score->loadMsc(name, false);
     } else if (csl == "mxl") {
         rv = importCompressedMusicXml(score, name);
-    }
-#ifdef OMR
-    else if (csl == "pdf") {
-        rv = importPdf(score, name);
-    }
-#endif
-    else if (csl == "xml" || csl == "musicxml") {
+    } else if (csl == "xml" || csl == "musicxml") {
         rv = importMusicXml(score, name);
     } else if (csl == "gp3" || csl == "gp4" || csl == "gp5" || csl == "gpx" || csl == "gp" || csl == "ptb") {
         rv = importGTP(score, name);
@@ -216,6 +211,16 @@ bool MTest::saveCompareMusicXmlScore(MasterScore* score, const QString& saveName
 }
 
 //---------------------------------------------------------
+//   saveCompareBrailleScore
+//---------------------------------------------------------
+
+bool MTest::saveCompareBrailleScore(MasterScore* score, const QString& saveName, const QString& compareWith)
+{
+    saveBraille(score, saveName);
+    return compareFiles(saveName, compareWith);
+}
+
+//---------------------------------------------------------
 //   savePdf
 //---------------------------------------------------------
 
@@ -276,6 +281,15 @@ bool MTest::savePdf(MasterScore* cs, const QString& saveName)
 bool MTest::saveMusicXml(MasterScore* score, const QString& saveName)
 {
     return saveXml(score, saveName);
+}
+
+//---------------------------------------------------------
+//   saveBraille
+//---------------------------------------------------------
+
+bool MTest::saveBraille(MasterScore* score, const QString& saveName)
+{
+    return Ms::saveBraille(score, saveName);
 }
 
 //---------------------------------------------------------
